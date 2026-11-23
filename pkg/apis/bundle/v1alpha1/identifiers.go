@@ -26,6 +26,11 @@ const (
 	// InlinePathIdentifier is an identifier used to preserve the path where an
 	// object was inlined from.
 	InlinePathIdentifier Identifier = "bundle.gke.io/inline-path"
+
+	// AllowDuplicateObjectIdentifier is an annotation that allows two objects
+	// with the same identity in different components. It must be present on both
+	// objects, with the value "true", for the duplication to be allowed.
+	AllowDuplicateObjectIdentifier Identifier = "bundle.gke.io/allow-duplicate-object"
 )
 
 // InlineType is a value that the InlineTypeIdentifier can take.

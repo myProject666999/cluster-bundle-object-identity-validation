@@ -236,6 +236,79 @@ bundlectl filter -f my-component.yaml --filterType=objects --kind=ConfigMap
 bundlectl filter -f my-component.yaml --filterType=objects --kind=ConfigMap --invert-match
 ```
 
+### Validation
+
+`bundlectl validate` checks a Component or a Bundle. For a Component it checks
+both the component metadata (name, SemVer version, `apiVersion`, `kind`) and
+every object in `spec.objects`. For a Bundle it validates every component and
+checks object identities across the whole set, because a bundle exports all of
+its components together.
+
+```shell
+bundlectl validate --input-file=my-bundle.yaml
+```
+
+The command prints warnings to stdout and exits non-zero only when there are
+errors.
+
+Object-level rules:
+
+| Rule | Severity |
+| --- | --- |
+| `apiVersion` is present and has the form `group/version` (or `version`) | error |
+| `kind` is present | error |
+| `metadata.name` is present, a DNS-1123 subdomain, and not empty | error |
+| `metadata.generateName` is used without `metadata.name` | error |
+| Object has no explicit `metadata.namespace` (except well-known cluster-scoped kinds) | warning |
+| Two objects in the same component with the same identity and identical content | warning |
+| Two objects in the same component with the same identity and different content | error |
+| Two objects in different components with the same identity | warning for this release; see below |
+
+An object's identity is `(group, kind, namespace, name)`. The version part of
+`apiVersion` is not part of the identity, so `apps/v1` and `apps/v1beta1`
+Deployment objects with the same name collide. The Bundle library does not use
+API discovery, so it cannot tell whether an arbitrary kind is namespaced; a
+namespace participates in the identity only when it is written explicitly in
+`metadata.namespace`. Missing namespaces are treated as the empty namespace.
+
+Cross-component duplicates have no override semantics in a Bundle: a later
+component does not replace an earlier one. To keep existing packages passing
+while they are inspected, cross-component duplicates are **warnings** in this
+release and will become **errors** in a future release. Callers using the Go API
+can opt in to the stricter behavior now with
+`validate.Options{CrossComponentDuplicateSeverity: validate.SeverityError}`.
+
+Duplication across components can be declared intentional with the annotation
+`bundle.gke.io/allow-duplicate-object: "true"`. The annotation must be on both
+objects.
+
+Several versions of the same component name (for example `etcd` 1.0.0 and
+`etcd` 2.0.0 in one ComponentSet) are treated as alternative versions when the
+set is validated without selecting one: collisions between different versions
+of the same name are ignored, while collisions between different names are still
+reported. Validation of components that will actually be exported together does
+not grant this exemption, because version differences do not make a real
+collision safe.
+
+Validation is phase-aware. Before rendering, `ObjectTemplate` and `PatchTemplate`
+objects are checked as templates (their name is optional and they do not
+participate in identity checks). After rendering, every object is a final
+object, so a surviving template is an error. Use `validate.ValidateComponent`
+with `validate.Options{Phase: ...}`, and call it once in each phase.
+
+Findings are capped (100 errors and 100 warnings by default). When the cap is
+exceeded, the findings that sort last are omitted and a summary with the total
+count is appended. Findings are ordered by component reference and object index,
+so repeated runs over the same input produce identical output. Field paths have
+the form `Component[{name version}].Spec.Objects[3].Metadata.Name`.
+
+A `ComponentSet` contains only references. `validate.ValidateComponentSet`
+accepts an optional pool of components, expands each reference to the exact
+component with the same name and version, and validates the objects it finds.
+References that cannot be expanded are reported in `Report.MissingReferences`,
+and `Report.ObjectsValidated` is only true when every reference was expanded;
+without a pool, only the references themselves are checked.
+
 ### Component Testing
 
 The Cluster Bundle library provides *experimental* support for testing

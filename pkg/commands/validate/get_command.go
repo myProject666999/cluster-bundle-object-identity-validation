@@ -28,7 +28,7 @@ func GetCommand(ctx context.Context, fio files.FileReaderWriter, sio cmdlib.Stdi
 	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate a bundle file",
-		Long:  `Validate a bundle file to ensure the bundle file follows the bundle schema and doesn't contain errors.`,
+		Long:  `Validate a Component or Bundle. Component metadata and every object in the component are checked, and for a Bundle object identities are checked across all components. Warnings are printed to stdout; the command exits non-zero only when errors are found.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			action(ctx, fio, sio, cmd, gopts)
 		},

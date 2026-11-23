@@ -17,39 +17,70 @@ package validate
 import (
 	"context"
 	"fmt"
+	"io"
 
-	log "k8s.io/klog"
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	log "k8s.io/klog"
 
 	"github.com/GoogleCloudPlatform/k8s-cluster-bundle/pkg/commands/cmdlib"
 	"github.com/GoogleCloudPlatform/k8s-cluster-bundle/pkg/files"
 	"github.com/GoogleCloudPlatform/k8s-cluster-bundle/pkg/validate"
+	"github.com/GoogleCloudPlatform/k8s-cluster-bundle/pkg/wrapper"
 )
 
 // Action is the cobra command action for bundle validation.
 func action(ctx context.Context, fio files.FileReaderWriter, sio cmdlib.StdioReaderWriter, cmd *cobra.Command, gopts *cmdlib.GlobalOptions) {
 	brw := cmdlib.NewBundleReaderWriter(fio, sio)
-	if err := runValidate(ctx, brw, gopts); err != nil {
+	if err := runValidate(ctx, brw, sio, gopts); err != nil {
 		log.Exit(err)
 	}
 }
 
-func runValidate(ctx context.Context, brw cmdlib.BundleReaderWriter, gopt *cmdlib.GlobalOptions) error {
+func runValidate(ctx context.Context, brw cmdlib.BundleReaderWriter, sio io.Writer, gopt *cmdlib.GlobalOptions) error {
 	bw, err := brw.ReadBundleData(ctx, gopt)
 	if err != nil {
 		return fmt.Errorf("error reading contents: %v", err)
 	}
 
-	bundleType := bw.Kind()
-	if bundleType == "Component" {
-		errs := validate.Component(bw.Component())
-		if len(errs) > 0 {
-			return fmt.Errorf("there were one or more errors found while validating the bundle:\n%v", errs.ToAggregate())
+	report := validateWrapper(bw)
+
+	// Warnings are advisory and are printed regardless of whether there are
+	// errors, so that a partially-clean input still surfaces its suspicions.
+	if len(report.Warnings) > 0 {
+		fmt.Fprintf(sio, "Warnings:\n%v\n", report.Warnings.ToAggregate())
+	}
+
+	if report.HasErrors() {
+		msg := fmt.Sprintf("there were one or more errors found while validating the bundle:\n%v", report.Errors.ToAggregate())
+		if report.TruncatedErrors {
+			msg += fmt.Sprintf("\n(%d errors total; only the first %d are shown)", report.TotalErrors, len(report.Errors)-1)
 		}
-	} else { // TODO(BradfordMedeiros): add validation for BundleBuilder, Bundle, ComponentBuilder here.
-		return fmt.Errorf("Kind %q not yet supported", bundleType)
+		return fmt.Errorf("%s", msg)
 	}
 
 	log.Info("No errors found")
 	return nil
+}
+
+// validateWrapper dispatches validation based on the wrapped kind. Bundle
+// components are validated together, because a bundle exports all of them at
+// once.
+func validateWrapper(bw *wrapper.BundleWrapper) *validate.Report {
+	switch bw.Kind() {
+	case "Component":
+		return validate.ValidateComponent(bw.Component(), validate.Options{})
+	case "Bundle":
+		// A bundle exports all of its components at once, so they are validated
+		// as one exported set.
+		return validate.ValidateComponents(bw.AllComponents(), validate.Options{Scope: validate.ScopeExported})
+	default:
+		// TODO(BradfordMedeiros): add validation for BundleBuilder, ComponentBuilder here.
+		err := field.NotSupported(field.NewPath("Kind"), bw.Kind(),
+			[]string{"Component", "Bundle"})
+		return &validate.Report{
+			Errors:      field.ErrorList{err},
+			TotalErrors: 1,
+		}
+	}
 }

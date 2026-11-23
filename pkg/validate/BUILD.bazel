@@ -4,14 +4,18 @@ go_library(
     name = "go_default_library",
     srcs = [
         "doc.go",
+        "report.go",
         "validate_component.go",
         "validate_name.go",
+        "validate_objects.go",
     ],
     importpath = "github.com/GoogleCloudPlatform/k8s-cluster-bundle/pkg/validate",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/apis/bundle/v1alpha1:go_default_library",
         "@com_github_blang_semver//:go_default_library",
+        "@io_k8s_apimachinery//pkg/apis/meta/v1/unstructured:go_default_library",
+        "@io_k8s_apimachinery//pkg/runtime/schema:go_default_library",
         "@io_k8s_apimachinery//pkg/util/validation:go_default_library",
         "@io_k8s_apimachinery//pkg/util/validation/field:go_default_library",
     ],
@@ -20,13 +24,21 @@ go_library(
 go_test(
     name = "go_default_test",
     srcs = [
+        "examples_test.go",
         "validate_component_test.go",
         "validate_name_test.go",
+        "validate_objects_test.go",
     ],
+    data = ["//examples:testdata"],
     embed = [":go_default_library"],
     deps = [
+        "//pkg/apis/bundle/v1alpha1:go_default_library",
+        "//pkg/build:go_default_library",
         "//pkg/converter:go_default_library",
         "//pkg/testutil:go_default_library",
+        "//pkg/validate:go_default_library",
+        "@io_k8s_apimachinery//pkg/apis/meta/v1:go_default_library",
+        "@io_k8s_apimachinery//pkg/apis/meta/v1/unstructured:go_default_library",
         "@io_k8s_apimachinery//pkg/util/validation/field:go_default_library",
     ],
 )

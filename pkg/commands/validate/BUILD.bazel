@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "go_default_library",
@@ -12,7 +12,19 @@ go_library(
         "//pkg/commands/cmdlib:go_default_library",
         "//pkg/files:go_default_library",
         "//pkg/validate:go_default_library",
+        "//pkg/wrapper:go_default_library",
         "@com_github_spf13_cobra//:go_default_library",
+        "@io_k8s_apimachinery//pkg/util/validation/field:go_default_library",
         "@io_k8s_klog//:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = ["validate_test.go"],
+    embed = [":go_default_library"],
+    deps = [
+        "//pkg/commands/cmdlib:go_default_library",
+        "//pkg/wrapper:go_default_library",
     ],
 )
